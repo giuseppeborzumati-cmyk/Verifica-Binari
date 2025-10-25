@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generatore Verifiche di Programmazione</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com/"></script>
+    <!-- Font Inter for professional look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- jsPDF and JSZip CDNs for PDF and ZIP generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#4f46e5',
+                        'primary-dark': '#4338ca',
+                        'secondary': '#f97316',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom styles for better aesthetics and PDF handling feedback */
+        body {
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .loader {
+            border-top-color: #3498db;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .header-bg {
+            background-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="font-sans">
+
+    <div class="header-bg text-white py-6 shadow-lg">
+        <div class="container mx-auto px-4">
+            <h1 class="text-3xl font-bold">Generatore Verifiche Prof. Borzumati</h1>
+            <p class="mt-1 text-indigo-200">Crea set di verifiche uniche su Networking, Sistemi di Numerazione e Numeri Romani (Max 100 Punti).</p>
+        </div>
+    </div>
+
+    <div class="container mx-auto mt-8 p-4 bg-white rounded-lg shadow-xl">
+        <h2 class="text-2xl font-semibold text-gray-700 mb-6">Parametri di Generazione</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div>
+                <label for="numAlunni" class="block text-sm font-medium text-gray-700">Numero di Verifiche/Alunni</label>
+                <input type="number" id="numAlunni" value="1" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-3 border" required>
+            </div>
+            <div>
+                <label for="profNome" class="block text-sm font-medium text-gray-700">Nome Docente</label>
+                <input type="text" id="profNome" value="Giuseppe Borzumati" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-3 border">
+            </div>
+            <div>
+                <label for="classeIndirizzo" class="block text-sm font-medium text-gray-700">Classe/Indirizzo</label>
+                <input type="text" id="classeIndirizzo" value="4° Informatica" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary p-3 border">
+            </div>
+        </div>
+
+        <button id="generateBtn" onclick="startGeneration()" class="w-full py-3 px-6 border border-transparent rounded-lg shadow-md text-lg font-medium text-white bg-secondary hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">
+            Genera Verifiche (ZIP)
+        </button>
+
+        <div id="loadingIndicator" class="hidden mt-6 text-center">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto mb-3"></div>
+            <p class="text-lg text-primary">Generazione in corso... per favore attendi. Creazione di PDF e ZIP...</p>
+        </div>
+
+        <div id="messageBox" class="mt-6 p-4 text-sm font-medium rounded-lg hidden"></div>
+    </div>
+
+    <script type="text/javascript">
+        // Importa l'oggetto jsPDF e jszip in modo che siano disponibili in window
+        const { jsPDF } = window.jspdf;
+        const JSZip = window.JSZip;
+
+        // Variabili globali per l'autenticazione (non usate qui, ma mantenute come best practice)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // --- Funzioni di Utility per Generazione e Punteggi ---
+
+        /*
+            CONFIGURAZIONE REVISIONATA: 10 Esercizi per un Totale di 100 Punti.
+            Vengono usati solo ID di esercizi relativi a Conversione Basi, Numeri Romani e Subnetting.
+            ID di Riferimento: 1, 2, 3 (Conversioni/Romani) | 4, 8 (Subnetting) | 5, 6 (Float)
+        */
+        const SCORE_CONFIG = [
+            // Conversione Base (2/8/10/16)
+            { id: 1, refId: 1, total: 6, T: 2, P: 4, focus: 'Conversione Base Semplice (10 -> 2/8)' },
+            { id: 2, refId: 2, total: 6, T: 2, P: 4, focus: 'Conversione Base Ottale/Esadecimale' },
+            { id: 3, refId: 3, total: 10, T: 4, P: 6, focus: 'Notazione Polinomiale e Numeri Romani' },
+            { id: 4, refId: 1, total: 6, T: 2, P: 4, focus: 'Conversione Base Semplice (10 -> 2/8) - Duplicato' },
+            { id: 5, refId: 2, total: 6, T: 2, P: 4, focus: 'Conversione Base Ottale/Esadecimale - Duplicato' },
+            
+            // Subnetting
+            { id: 6, refId: 4, total: 10, T: 3, P: 7, focus: 'Subnetting Base (Maschera Class C)' },
+            { id: 7, refId: 8, total: 15, T: 5, P: 10, focus: 'Subnetting Avanzato (CIDR e Vantaggi)' },
+            
+            // Floating Point (Considerato "Conversione Numerica Complessa")
+            { id: 8, refId: 5, total: 12, T: 4, P: 8, focus: 'Conversione Float (Binario -> Decimale)' },
+            { id: 9, refId: 6, total: 14, T: 5, P: 9, focus: 'Conversione Float (Decimale -> Binario)' },
+            
+            // Subnetting Complesso (Duplicato)
+            { id: 10, refId: 8, total: 15, T: 5, P: 10, focus: 'Subnetting Avanzato (CIDR e Vantaggi) - Duplicato' }
+            
+            // Totale Punti: 6+6+10+6+6+10+15+12+14+15 = 100 Punti
+        ];
+
+        let generatedDataCache = [];
+
+        // Genera un numero intero casuale tra min e max (inclusi)
+        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        // Genera una traccia unica per l'esercizio X
+        function generateExerciseTrace(exConfig, studentId) {
+            // Utilizziamo refId per decidere la logica della traccia
+            const id = exConfig.refId;
+            let trace = {};
+
+            switch (id) {
+                // Riferimento ID 1: Base Conversion (Simple)
+                case 1: 
+                    const n1_10 = randomInt(50, 150);
+                    trace.traccia = `Converti il numero in base 10: ${n1_10}, nelle seguenti basi:\n  a) Base 2 (Binario)\n  b) Base 8 (Ottale)`;
+                    trace.soluzione = `Binario: ${n1_10.toString(2)}\nOttale: ${n1_10.toString(8)}`;
+                    trace.spiegazione = "Conversione standard per numeri interi. Utilizza il metodo delle divisioni successive.";
+                    trace.q_teoria = "Qual è la differenza fondamentale tra la notazione posizionale e quella non posizionale? Fornisci un esempio per ciascuna.";
+                    break;
+
+                // Riferimento ID 2: Base Conversion (Octal/Hex)
+                case 2: 
+                    const n2_8 = randomInt(100, 300).toString(8);
+                    trace.traccia = `Converti il numero ottale ${n2_8} in:\n  a) Base 10 (Decimale)\n  b) Base 16 (Esadecimale)`;
+                    trace.soluzione = `Decimale: ${parseInt(n2_8, 8)}\nEsadecimale: ${parseInt(n2_8, 8).toString(16).toUpperCase()}`;
+                    trace.spiegazione = "Converti prima in base 10 usando la notazione polinomiale, poi in base 16 (eventualmente tramite binario).";
+                    trace.q_teoria = "Descrivi come si utilizza la notazione polinomiale per dimostrare il valore di un numero come 425 in base 8.";
+                    break;
+
+                // Riferimento ID 3: Roman/Polynomial Notation
+                case 3: 
+                    const n3_10 = randomInt(1500, 2500);
+                    const romanToConvert = randomInt(1, 499);
+                    trace.traccia = `Dato il numero ${n3_10}, scrivilo in Notazione Polinomiale in base 10 e converti il valore ${romanToConvert} in numeri romani.`;
+                    trace.soluzione = `Polinomiale: ${n3_10.toString().split('').reverse().map((d, i) => `${d} \\cdot 10^{${i}}`).reverse().join(' + ')}\nRomano per ${romanToConvert}: ${numberToRoman(romanToConvert)}`;
+                    trace.spiegazione = "La notazione polinomiale è la somma dei prodotti delle cifre per le potenze della base. I numeri romani utilizzano un sistema additivo/sottrattivo.";
+                    trace.q_teoria = "La base 10 è la base più efficiente per i sistemi digitali? Giustifica la tua risposta in relazione a Basi 2, 8 e 16.";
+                    break;
+
+                // Riferimento ID 4: Subnetting (Simple Class C)
+                case 4: 
+                    const ip4 = `192.168.${randomInt(1, 254)}.0`;
+                    const mask4_dec = "255.255.255.192"; // /26
+                    const mask4_cidr = "/26";
+                    const hosts4 = 62;
+                    const netid4_1 = randomInt(0, 3) * 64;
+                    const bcast4_1 = netid4_1 + 63;
+
+                    trace.traccia = `Un amministratore di rete decide di utilizzare la maschera ${mask4_dec} (${mask4_cidr}) per suddividere la rete ${ip4}.\nPer la sottorete che include l'indirizzo IP ${ip4.replace('.0', `.${netid4_1 + 1}`)}, determina:\n  a) Network ID\n  b) Broadcast ID\n  c) Numero massimo di Host utilizzabili.`;
+                    trace.soluzione = `Network ID: ${ip4.replace('.0', `.${netid4_1}`)}\nBroadcast ID: ${ip4.replace('.0', `.${bcast4_1}`)}\nHost utilizzabili: ${hosts4}`;
+                    trace.spiegazione = "La maschera /26 (192) crea 4 sottoreti da 64 indirizzi ciascuna. 2^6 - 2 = 62 host. Il Network ID e Broadcast ID si calcolano tramite l'operazione AND e OR con la maschera.";
+                    trace.q_teoria = "Spiega il ruolo del Broadcast ID in una sottorete e perché il numero di host utilizzabili è sempre (2^n) - 2.";
+                    break;
+
+                // Riferimento ID 5: Binary Float (to Decimal)
+                case 5: 
+                    const n5_float = `101.${randomInt(1, 15).toString(2).padStart(4, '0')}`; // E.g., 101.0110
+                    trace.traccia = `Converti il seguente numero binario con la virgola ${n5_float} in base 10. Descrivi i passaggi utilizzati per la parte frazionaria.`;
+                    const n5_int = parseInt(n5_float.split('.')[0], 2); // 5
+                    const n5_frac = n5_float.split('.')[1]; // 0110
+                    let val5_frac = 0;
+                    for (let i = 0; i < n5_frac.length; i++) {
+                        if (n5_frac[i] === '1') {
+                            val5_frac += Math.pow(2, -(i + 1));
+                        }
+                    }
+                    trace.soluzione = `Decimale: ${(n5_int + val5_frac).toFixed(4)}. Il valore è calcolato come:\\ $${n5_int} + (${n5_frac.split('').map((d, i) => `${d} \\cdot 2^{-${i + 1}}`).join(' + ')}) = ${(n5_int + val5_frac).toFixed(4)}$`;
+                    trace.spiegazione = "Si utilizza la notazione polinomiale, ma con esponenti negativi ($2^{-1}, 2^{-2}, ...$) per la parte frazionaria.";
+                    trace.q_teoria = "Qual è il limite principale della rappresentazione in virgola mobile per i numeri periodici e come questo influisce sui calcoli in un linguaggio di programmazione?";
+                    break;
+
+                // Riferimento ID 6: Decimal to Binary Float
+                case 6: 
+                    const n6_dec = randomInt(10, 20) + Math.random();
+                    const n6_int = Math.floor(n6_dec);
+                    let n6_frac = n6_dec - n6_int;
+                    let binaryFrac = '';
+                    let tempFrac = n6_frac;
+                    // Genera 8 cifre binarie per la parte frazionaria
+                    for (let i = 0; i < 8; i++) {
+                        tempFrac *= 2;
+                        binaryFrac += Math.floor(tempFrac);
+                        tempFrac -= Math.floor(tempFrac);
+                    }
+                    trace.traccia = `Converti il numero decimale ${n6_dec.toFixed(4)} in binario con la virgola. Utilizza un massimo di 8 cifre per la parte frazionaria.`;
+                    trace.soluzione = `Binario: ${n6_int.toString(2)}.${binaryFrac}`;
+                    trace.spiegazione = "La parte intera si converte con divisioni successive; la parte frazionaria con moltiplicazioni successive per 2, prendendo la parte intera del risultato.";
+                    trace.q_teoria = "Se dovessi implementare una libreria per la gestione di numeri a virgola mobile in C/C++, quale struttura dati e quale approccio utilizzeresti per bilanciare precisione e velocità?";
+                    break;
+
+                // Riferimento ID 8: Subnetting (Complex CIDR)
+                case 8: 
+                    const ip8 = `10.${randomInt(1, 254)}.${randomInt(1, 254)}.0`;
+                    const mask8_cidr = `/19`;
+                    // /19 = 255.255.224.0. Block size: 32 (256-224). Hosts: 2^13 - 2 = 8190
+                    const hosts8 = 8190;
+                    const mask8_dec = "255.255.224.0";
+                    const block8 = 32; // Incremento sul terzo ottetto
+                    const netid8_start = randomInt(0, 7) * block8; 
+                    const ip_in_subnet = `${ip8.split('.')[0]}.${ip8.split('.')[1]}.${netid8_start + randomInt(1, 30)}.${randomInt(1, 254)}`;
+
+                    trace.traccia = `Data la rete ${ip8} con notazione CIDR ${mask8_cidr}, determina:\n  a) La Maschera di Sottorete in notazione decimale puntata.\n  b) Il Network ID e il Broadcast ID della sottorete a cui appartiene l'indirizzo IP ${ip_in_subnet}.\n  c) Il numero massimo di host utilizzabili per questa sottorete.`;
+                    trace.soluzione = `a) Maschera: ${mask8_dec}\nb) Network ID: ${ip8.split('.')[0]}.${ip8.split('.')[1]}.${netid8_start}.0\nBroadcast ID: ${ip8.split('.')[0]}.${ip8.split('.')[1]}.${netid8_start + 31}.255\nc) Host utilizzabili: ${hosts8}`;
+                    trace.spiegazione = "La maschera /19 è data da 16 bit interi + 3 bit del terzo ottetto. Il blocco è 2^(8-3) = 32. Il Network ID è il multiplo di 32 inferiore o uguale al terzo ottetto dell'IP fornito.";
+                    trace.q_teoria = "Quali vantaggi architetturali (ad esempio in termini di routing) offre l'uso di CIDR rispetto alla suddivisione in classi A, B, C? Come si riflette questo sull'efficienza di internet?";
+                    break;
+
+                default:
+                    trace.traccia = "Errore: Esercizio non definito per la configurazione vincolata.";
+                    trace.soluzione = "Errore.";
+                    trace.spiegazione = "Errore.";
+                    trace.q_teoria = "Errore.";
+            }
+
+            return { ...exConfig, ...trace };
+        }
+
+        // --- Logica PDF e Zip ---
+
+        function setMessageBox(message, type = 'info') {
+            const box = document.getElementById('messageBox');
+            box.innerText = message;
+            box.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'bg-blue-100', 'text-blue-700');
+
+            if (type === 'error') {
+                box.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'success') {
+                box.classList.add('bg-green-100', 'text-green-700');
+            } else {
+                box.classList.add('bg-blue-100', 'text-blue-700');
+            }
+        }
+
+        // Genera il PDF per lo studente o per il docente
+        function generatePDF(isProfessor, quizData, studentDetails) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4'); // A4: 210mm x 297mm
+            let pageHeight = 297;
+            let currentY = 10;
+            const leftMargin = 15;
+            const rightMargin = 195;
+            const textWidth = rightMargin - leftMargin;
+            
+            // Definizioni di base per le altezze delle righe e dei caratteri
+            const LINE_HEIGHT = 5;
+            const TEXT_LINE_HEIGHT = 4.5;
+            const PADDING = 3;
+
+            // Intestazione e Footer
+            const headerText = isProfessor ? "Verifica Soluzioni - Prof. Giuseppe Borzumati" : "Verifica prodotta da Prof. Giuseppe Borzumati - Verifica di Programmazione";
+            const footerText = isProfessor ? "File Docente - Riservato" : `Classe ${studentDetails.classeIndirizzo} | ID Univoco: ${studentDetails.id}`;
+
+            const drawHeaderAndFooter = (doc, pageNumber) => {
+                // Footer
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text(`Pagina ${pageNumber}`, rightMargin, pageHeight - 10, { align: 'right' });
+                doc.text(footerText, leftMargin, pageHeight - 10);
+
+                // Header
+                doc.setFontSize(9);
+                doc.setTextColor(79, 70, 229); // primary color
+                doc.text(headerText, leftMargin, 10);
+
+                // Separator
+                doc.setDrawColor(79, 70, 229);
+                doc.setLineWidth(0.2);
+                doc.line(leftMargin, 12, rightMargin, 12);
+            };
+
+            // Aggiungi header e footer alla prima pagina
+            drawHeaderAndFooter(doc, 1);
+
+            // Intestazione della Verifica (Solo Studente)
+            if (!isProfessor) {
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0);
+                currentY = 18;
+                const headerBoxY = currentY;
+
+                doc.setFillColor(243, 244, 246); // Light gray background
+                doc.rect(leftMargin, headerBoxY, textWidth, 30, 'F');
+
+                doc.setTextColor(55, 65, 81);
+                doc.setFont("helvetica", "bold");
+                doc.text("Dati Studente", leftMargin + 2, headerBoxY + 4);
+
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 0, 0);
+
+                // NOME (Lasciare spazio)
+                doc.text(`Nome:`, leftMargin + 2, headerBoxY + 10);
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(0.2);
+                doc.line(leftMargin + 15, headerBoxY + 10.5, leftMargin + 80, headerBoxY + 10.5); // Linea per nome
+
+                // COGNOME (Lasciare spazio)
+                doc.text(`Cognome:`, leftMargin + 2, headerBoxY + 16);
+                doc.line(leftMargin + 22, headerBoxY + 16.5, leftMargin + 87, headerBoxY + 16.5); // Linea per cognome
+
+                doc.text(`Classe/Indirizzo: ${studentDetails.classeIndirizzo}`, leftMargin + 2, headerBoxY + 22);
+                doc.text(`Data: ${studentDetails.data}`, leftMargin + 2, headerBoxY + 28);
+                
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(79, 70, 229);
+                doc.text("Voto Finale (Max 10):", rightMargin - 40, headerBoxY + 28);
+                doc.setDrawColor(79, 70, 229);
+                doc.setLineWidth(0.7);
+                doc.rect(rightMargin - 15, headerBoxY + 24, 10, 5, 'S'); // Box for final score
+
+                currentY = headerBoxY + 35;
+            } else {
+                // Header per il Docente
+                currentY = 18;
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(234, 88, 12); // Secondary color
+                doc.text("SOLUZIONI e GUIDA ALLA VALUTAZIONE", leftMargin, currentY);
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(10);
+                currentY += 5;
+            }
+
+            // Aggiungi le Pagine degli Esercizi
+            quizData.forEach((ex, index) => {
+                const { total, T, P, focus, traccia, soluzione, spiegazione, q_teoria } = ex;
+                
+                const exNum = index + 1;
+                const exTitle = `Esercizio ${exNum} - ${focus}`;
+
+                // --- Pagina della Traccia (Esercizio) ---
+
+                // Calcola l'altezza necessaria per la traccia dell'esercizio
+                const splitTrace = doc.splitTextToSize(traccia, textWidth);
+                const traceHeight = splitTrace.length * TEXT_LINE_HEIGHT + PADDING;
+                
+                // Stima altezza necessaria per la sezione
+                const neededHeight = 10 + traceHeight + (isProfessor ? 10 : 8); 
+                
+                if (currentY + neededHeight > pageHeight - 20) {
+                    doc.addPage();
+                    currentY = 18;
+                    drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+                }
+
+                // Intestazione Esercizio
+                doc.setFontSize(11);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(234, 88, 12); // Secondary color
+                doc.text(exTitle, leftMargin, currentY);
+
+                // Griglia Punteggio Esercizio
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 0, 0);
+
+                const tableX = rightMargin - 45;
+                const tableY = currentY - 2;
+                const cellWidth = 10;
+                const cellHeight = 4;
+
+                doc.setDrawColor(0, 0, 0);
+                doc.setFillColor(254, 243, 199); // Light yellow for score
+                doc.rect(tableX, tableY, 45, cellHeight, 'F');
+                doc.text(`P. Max: ${total}`, tableX + 2, tableY + 3);
+
+                doc.setFillColor(255, 255, 255);
+                doc.rect(tableX, tableY + cellHeight, 45, cellHeight * 2, 'S'); // Box for Teoria/Pratica
+                doc.setFontSize(7);
+                doc.text("Teoria", tableX + 1, tableY + cellHeight + 3);
+                doc.text(`(${T} P)`, tableX + 1, tableY + cellHeight + 7);
+                doc.line(tableX + cellWidth, tableY + cellHeight, tableX + cellWidth, tableY + cellHeight * 3);
+                doc.text("Pratica/Svolg.", tableX + cellWidth + 1, tableY + cellHeight + 3);
+                doc.text(`(${P} P)`, tableX + cellWidth + 1, tableY + cellHeight + 7);
+                doc.line(tableX + cellWidth * 2.5, tableY + cellHeight, tableX + cellWidth * 2.5, tableY + cellHeight * 3);
+                doc.text("Totale", tableX + cellWidth * 2.5 + 1, tableY + cellHeight + 3);
+                doc.text(`(${total} P)`, tableX + cellWidth * 2.5 + 1, tableY + cellHeight + 7);
+                // Box for Professor's score
+                doc.rect(tableX + cellWidth * 3.7, tableY + cellHeight, 8, cellHeight * 2, 'S');
+
+                currentY += 6;
+
+                // Traccia dell'Esercizio
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(0, 0, 0);
+                
+                // Usa l'altezza della traccia calcolata in precedenza
+                doc.text(splitTrace, leftMargin, currentY);
+                currentY += traceHeight + PADDING;
+
+                // Area Risposta (Solo Studente)
+                if (!isProfessor) {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(79, 70, 229);
+                    doc.text("Spazio per Svolgimento/Output Finale:", leftMargin, currentY);
+                    currentY += 2;
+
+                    // Linee per la risposta: più righe per float e subnetting complessi.
+                    let linesCount = 0;
+                    if (ex.refId === 8) { // Subnetting Complesso
+                        linesCount = 18;
+                    } else if (ex.refId === 5 || ex.refId === 6) { // Float
+                        linesCount = 12;
+                    } else { // Romani/Conversioni semplici
+                        linesCount = 8;
+                    }
+                    
+                    // Controlla che le linee di risposta non escano dalla pagina
+                    let availableSpace = pageHeight - currentY - 20;
+                    let maxLines = Math.floor(availableSpace / LINE_HEIGHT);
+                    const finalLinesCount = Math.min(linesCount, maxLines);
+
+                    for (let i = 0; i < finalLinesCount; i++) {
+                        currentY += LINE_HEIGHT;
+                        doc.line(leftMargin, currentY, rightMargin, currentY);
+                    }
+                    
+                    // Se lo spazio è finito, aggiungi la pagina qui e continua
+                    if (linesCount > finalLinesCount) {
+                        doc.addPage();
+                        currentY = 18;
+                        drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+                        // Continua con le linee mancanti
+                        for (let i = finalLinesCount; i < linesCount; i++) {
+                            currentY += LINE_HEIGHT;
+                            doc.line(leftMargin, currentY, rightMargin, currentY);
+                        }
+                    }
+                    currentY += 8;
+                }
+
+                // --- Pagina della Spiegazione (Solo Studente) ---
+
+                if (!isProfessor) {
+                    // Prepara la domanda teorica
+                    const q_teoria_split = doc.splitTextToSize(`Domanda Rationale (Risposta Personale): ${q_teoria}`, textWidth);
+                    const q_teoria_height = q_teoria_split.length * TEXT_LINE_HEIGHT + PADDING;
+                    const theoryLines = (ex.refId === 8 || ex.refId === 6) ? 8 : 6;
+                    const requiredTheorySpace = 10 + q_teoria_height + (theoryLines * LINE_HEIGHT) + PADDING;
+                    
+                    // Aggiungi nuova pagina per la spiegazione se non c'è spazio
+                    if (currentY + requiredTheorySpace > pageHeight - 20) {
+                        doc.addPage();
+                        currentY = 18;
+                        drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+                    }
+
+                    // Sezione Spiegazione
+                    doc.setFontSize(11);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(234, 88, 12);
+                    doc.text(`Esercizio ${exNum} - Spiegazione/Motivazione (Punteggio Teorico: ${T} Punti)`, leftMargin, currentY);
+                    currentY += 5;
+
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(0, 0, 0);
+
+                    // Domanda sul Rationale (Personale)
+                    doc.text(q_teoria_split, leftMargin, currentY);
+                    currentY += q_teoria_height;
+
+                    // Linee per la spiegazione
+                    for (let i = 0; i < theoryLines; i++) {
+                        currentY += LINE_HEIGHT;
+                        doc.line(leftMargin, currentY, rightMargin, currentY);
+                    }
+                    currentY += 8;
+
+                    // Linea per separare l'esercizio successivo
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.5);
+                    doc.line(leftMargin, currentY, rightMargin, currentY);
+                    currentY += 3;
+
+                } else {
+                    // --- Sezione Soluzioni (Solo Docente) ---
+                    
+                    const splitSoluzione = doc.splitTextToSize(soluzione, textWidth);
+                    const splitSpiegazione = doc.splitTextToSize(spiegazione, textWidth);
+                    const splitQTeoria = doc.splitTextToSize(q_teoria, textWidth);
+                    
+                    const solutionHeight = splitSoluzione.length * TEXT_LINE_HEIGHT;
+                    const explanationHeight = splitSpiegazione.length * TEXT_LINE_HEIGHT;
+                    const theoryHeight = splitQTeoria.length * TEXT_LINE_HEIGHT;
+
+                    const totalSolutionSpace = 12 + solutionHeight + 8 + explanationHeight + 8 + theoryHeight + 10;
+                    
+                    // Aggiungi nuova pagina per le soluzioni se non c'è spazio
+                    if (currentY + totalSolutionSpace > pageHeight - 20) {
+                        doc.addPage();
+                        currentY = 18;
+                        drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+                    }
+
+
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(79, 70, 229);
+                    doc.text("Soluzione/Output Atteso:", leftMargin, currentY);
+                    currentY += 4;
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(0, 0, 0);
+
+                    doc.text(splitSoluzione, leftMargin, currentY);
+                    currentY += solutionHeight + PADDING;
+
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(234, 88, 12);
+                    doc.text("Spiegazione Tecnica (Docente):", leftMargin, currentY);
+                    currentY += 4;
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(0, 0, 0);
+
+                    doc.text(splitSpiegazione, leftMargin, currentY);
+                    currentY += explanationHeight + PADDING;
+
+                    doc.setFont("helvetica", "bold");
+                    doc.setTextColor(200, 50, 50); // Reddish for AI trap notes
+                    doc.text("Domanda Teoria/Rationale (Attesa):", leftMargin, currentY);
+                    currentY += 4;
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(0, 0, 0);
+
+                    doc.text(splitQTeoria, leftMargin, currentY);
+                    currentY += theoryHeight + 5;
+
+                    // Linea per separare l'esercizio successivo
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.5);
+                    doc.line(leftMargin, currentY, rightMargin, currentY);
+                    currentY += 5;
+                }
+            });
+
+            // --- Pagine Finali (Solo Studente) ---
+            if (!isProfessor) {
+                // Aggiungi una nuova pagina per le griglie finali
+                doc.addPage();
+                currentY = 18;
+                drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(79, 70, 229);
+                doc.text("Griglie di Valutazione e Conversione", leftMargin, currentY);
+                currentY += 8;
+
+                // 1. Griglia di Attribuzione del Punteggio (Base 100)
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(55, 65, 81);
+                doc.text("1. Indicazioni per l'Attribuzione dei Punteggi (Docente)", leftMargin, currentY);
+                currentY += 4;
+
+                const grid1X = leftMargin;
+                const grid1Y = currentY;
+                const grid1RowH = 6;
+                const grid1ColW = [80, 50, 65];
+
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "bold");
+                doc.setFillColor(254, 243, 199); // Light yellow
+                doc.rect(grid1X, grid1Y, grid1ColW[0] + grid1ColW[1] + grid1ColW[2], grid1RowH, 'F');
+                doc.text("Criterio di Valutazione", grid1X + 2, grid1Y + 4);
+                doc.text("Risposta/Svolgimento", grid1X + grid1ColW[0] + 2, grid1Y + 4);
+                doc.text("Punti (per Punto Teorico/Pratico)", grid1X + grid1ColW[0] + grid1ColW[1] + 2, grid1Y + 4);
+
+                currentY += grid1RowH;
+
+                const criteria = [
+                    { desc: "Risposta/Svolgimento Completo, Corretto e Ben Strutturato", rating: "Risposta Chiara e Dettagliata", score: "100% del Punteggio" },
+                    { desc: "Risposta/Svolgimento Corretto, ma con Imprecisioni Minime o Poca Chiarezza", rating: "Risposta Sufficiente", score: "50% del Punteggio" },
+                    { desc: "Svolgimento/Risposta Errato, Mancante o Fuori Tema", rating: "Risposta Insufficiente/Assente", score: "0 Punti" }
+                ];
+
+                doc.setFont("helvetica", "normal");
+                criteria.forEach((c, i) => {
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setFillColor(i % 2 === 0 ? 255 : 248, 248, 248); // Alternating light gray
+                    doc.rect(grid1X, currentY, grid1ColW[0] + grid1ColW[1] + grid1ColW[2], grid1RowH, 'F');
+                    doc.text(doc.splitTextToSize(c.desc, grid1ColW[0] - 2), grid1X + 2, currentY + 2);
+                    doc.text(doc.splitTextToSize(c.rating, grid1ColW[1] - 2), grid1X + grid1ColW[0] + 2, currentY + 3);
+                    doc.text(doc.splitTextToSize(c.score, grid1X + grid1ColW[0] + grid1ColW[1] + 2), grid1X + grid1ColW[0] + grid1ColW[1] + 2, currentY + 3);
+                    currentY += grid1RowH;
+                });
+                currentY += 5;
+
+                // 2. Tabella di Conversione Punteggio (Max 100 -> Max 10)
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(55, 65, 81);
+                doc.text("2. Tabella di Conversione del Punteggio (Max 100 Punti a Voto in Base 10)", leftMargin, currentY);
+                currentY += 4;
+
+                const convX = leftMargin;
+                const convY = currentY;
+                const convRowH = 6;
+                const convColW = 40;
+
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "bold");
+                doc.setFillColor(180, 210, 255); // Light blue
+                doc.rect(convX, convY, convColW * 4, convColW * 4, convRowH, 'F');
+                doc.text("Range Punteggio (Base 100)", convX + 2, convY + 4);
+                doc.text("Voto (Base 10)", convX + convColW + 2, convY + 4);
+                doc.text("Range Punteggio (Base 100)", convX + convColW * 2 + 2, convY + 4);
+                doc.text("Voto (Base 10)", convX + convColW * 3 + 2, convY + 4);
+
+                currentY += convRowH;
+
+                const conversionTable = [
+                    { min: 0.00, max: 3.50, voto: 3 },
+                    { min: 3.60, max: 4.50, voto: 4 },
+                    { min: 4.60, max: 5.50, voto: 5 },
+                    { min: 5.60, max: 6.50, voto: 6 },
+                    { min: 6.60, max: 7.50, voto: 7 },
+                    { min: 7.60, max: 8.50, voto: 8 },
+                    { min: 8.60, max: 9.50, voto: 9 },
+                    { min: 9.60, max: 10.00, voto: 10 }
+                ];
+                
+                // Conversione dei range in base 100 (moltiplicando per 10)
+                const convTable100 = conversionTable.map(item => ({
+                    min: (item.min * 10).toFixed(2),
+                    max: (item.max * 10).toFixed(2),
+                    voto: item.voto
+                }));
+                
+                // Conversione in base 100: Max 100 punti corrispondono a Max 10.
+                // Il punteggio è su 100, quindi i range sono [0-35], [36-45], etc.
+
+                doc.setFont("helvetica", "normal");
+                for (let i = 0; i < 4; i++) {
+                    const item1 = convTable100[i];
+                    const item2 = convTable100[i + 4];
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setFillColor(i % 2 === 0 ? 255 : 248, 248, 248); // Alternating light gray
+                    doc.rect(convX, currentY, convColW * 4, convRowH, 'F');
+
+                    doc.text(`Da ${item1.min} P ≤ P < ${item1.max} P`, convX + 2, currentY + 4);
+                    doc.text(item1.voto.toString(), convX + convColW + 2, currentY + 4);
+                    doc.text(`Da ${item2.min} P ≤ P < ${item2.max} P`, convX + convColW * 2 + 2, currentY + 4);
+                    doc.text(item2.voto.toString(), convX + convColW * 3 + 2, currentY + 4);
+
+                    currentY += convRowH;
+                }
+                currentY += 5;
+            }
+
+            // Aggiunge header e footer all'ultima pagina
+            drawHeaderAndFooter(doc, doc.internal.getNumberOfPages());
+
+            return doc.output('blob');
+        }
+
+        // Genera il numero romano
+        function numberToRoman(num) {
+            const romanMap = {
+                M: 1000, CM: 900, D: 500, CD: 400, C: 100, XC: 90, L: 50, XL: 40, X: 10, IX: 9, V: 5, IV: 4, I: 1
+            };
+            let roman = '';
+            for (const i in romanMap) {
+                while (num >= romanMap[i]) {
+                    roman += i;
+                    num -= romanMap[i];
+                }
+            }
+            return roman;
+        }
+
+        // Funzione principale per avviare la generazione
+        async function startGeneration() {
+            const numAlunni = parseInt(document.getElementById('numAlunni').value);
+            const profNome = document.getElementById('profNome').value.trim();
+            const classeIndirizzo = document.getElementById('classeIndirizzo').value.trim();
+            const today = new Date().toLocaleDateString('it-IT');
+
+            if (numAlunni < 1 || !profNome || !classeIndirizzo) {
+                setMessageBox("Per favore, inserisci un numero valido di verifiche, il nome del docente e la classe/indirizzo.", 'error');
+                return;
+            }
+
+            // Mostra l'indicatore di caricamento
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            setMessageBox(`Generazione di ${numAlunni} verifiche in corso...`, 'info');
+
+            const zip = new JSZip();
+            const quizCollection = [];
+
+            // 1. Genera i Dati per TUTTE le verifiche
+            for (let i = 1; i <= numAlunni; i++) {
+                const studentId = i.toString().padStart(2, '0');
+                
+                // Genera la traccia univoca per lo studente
+                const studentQuizData = SCORE_CONFIG.map(config => generateExerciseTrace(config, studentId));
+
+                quizCollection.push({
+                    id: studentId,
+                    nome: "Da compilare", 
+                    cognome: `Verifica ${studentId}`, // Nome usato solo per identificazione interna, non per stampa sul PDF Studente
+                    classeIndirizzo: classeIndirizzo,
+                    data: today,
+                    quizData: studentQuizData
+                });
+            }
+
+
+            // 2. Crea i PDF per gli Studenti e il Docente
+
+            // Docente: Prende i dati della prima verifica generata come base
+            const profData = quizCollection[0];
+            const profPDFBlob = generatePDF(true, profData.quizData, {
+                nome: 'Soluzioni',
+                cognome: profNome,
+                classeIndirizzo: classeIndirizzo,
+                data: today
+            });
+            zip.file(`DOCENTE_Soluzioni_${profNome.replace(/ /g, '_')}_${today.replace(/\//g, '-')}.pdf`, profPDFBlob);
+            setMessageBox(`Generazione PDF Soluzioni Docente completata.`, 'info');
+
+            // Studenti
+            for (const student of quizCollection) {
+                // Passa i dettagli, ma generatePDF per gli studenti disegnerà le linee vuote
+                const studentPDFBlob = generatePDF(false, student.quizData, student);
+                
+                // Il nome del file include l'ID univoco e la classe
+                const filename = `Verifica_Alunno_${student.id}_${student.classeIndirizzo.replace(/ /g, '_')}_${today.replace(/\//g, '-')}.pdf`;
+                zip.file(filename, studentPDFBlob);
+                setMessageBox(`Generazione PDF per Verifica N. ${student.id} completata. (${student.id}/${numAlunni})`, 'info');
+            }
+
+
+            // 3. Genera e Scarica lo ZIP
+            zip.generateAsync({ type: "blob" })
+                .then(function (content) {
+                    const zipFilename = `Verifiche_Net_Basi_${classeIndirizzo.replace(/ /g, '_')}_${today.replace(/\//g, '-')}.zip`;
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(content);
+                    a.download = zipFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                    document.getElementById('generateBtn').disabled = false;
+                    setMessageBox(`SUCCESS: File ZIP ${zipFilename} generato e scaricato correttamente! Contiene ${numAlunni + 1} file.`, 'success');
+                })
+                .catch(err => {
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                    document.getElementById('generateBtn').disabled = false;
+                    console.error(err);
+                    setMessageBox("ERRORE: Impossibile generare il file ZIP. Controlla la console per i dettagli.", 'error');
+                });
+        }
+    </script>
+
+</body>
+</html>
